@@ -1,0 +1,35 @@
+import sys
+import boto3
+import requests
+from bs4 import BeautifulSoup
+
+S3_BUCKET = 'imagenesbigdata'
+s3 = boto3.client('s3')
+
+def upload_file(file_name, bucket, object_name=None):
+    if object_name is None:
+        object_name = os.path.basename(file_name)
+    try:
+        response = s3.upload_file(file_name, bucket, object_name)
+    except ClientError as e:
+        logging.error(e)
+        return False
+    return True
+
+def sacarImagenes(URL):
+    page = requests.get(URL, stream=True)
+    imagen = []
+    soup = BeautifulSoup(page.content, "html.parser")
+    for i in set(soup.find_all("img")):
+        imagen.append(URL+i["src"])
+    return imagen
+
+file_content=["http://desmotivaciones.es/"]
+for i in file_content:
+    url=sacarImagenes(i)
+    for j in url:
+        print(j)
+        f = open('/tmp/images.txt','a+')
+        f.write(j+'\n')
+file=open("/tmp/images.txt", "rb")
+s3.upload_fileobj(file, S3_BUCKET, 'images.txt')
