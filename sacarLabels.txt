@@ -1,0 +1,61 @@
+import sys
+import boto3
+import requests
+from PIL import Image
+from io import BytesIO
+import time
+import json
+
+def upload_file(file_name, bucket, object_name=None):
+    if object_name is None:
+        object_name = os.path.basename(file_name)
+    try:
+        response = s3.upload_file(file_name, bucket, object_name)
+    except ClientError as e:
+        logging.error(e)
+        return False
+    return True
+ 
+
+
+def obtener(files_in_S3):
+    data = []
+    for j,y in files_in_S3:
+        response = rek_client.detect_labels(Image={'S3Object':{'Bucket':S3_BUCKET,'Name':j}})
+        label_lst = []
+        for label in response['Labels']:
+            label_lst.append(label['Name'])
+            for parents in label['Parents']:
+                label_lst.append(parents['Name'])
+        data.append({"index": y,"info":{"name":label_lst[0],"parents":label_lst[1:]}})
+        
+    return data
+    
+S3_BUCKET = 'imagenesbigdata'
+
+s3 = boto3.client('s3','us-east-1')
+rek_client = boto3.client('rekognition','us-east-1')
+
+object_key = "images.txt"
+file_content = str(s3.get_object(Bucket=S3_BUCKET, Key=object_key)["Body"].read().decode('utf-8')).split('\n')
+
+files_list=[]
+for e,i in enumerate(file_content):
+    if "svg" not in i and "https" in i and "png" in i:
+        try:
+            print(i)
+            response=requests.get(i,stream=True).raw
+            name = i.replace('/','')
+            s3.upload_fileobj(response, S3_BUCKET, name)
+            files_list.append((name,i))
+        except Exception as E:
+            raise(E)
+
+labels = obtener(files_list)
+
+with open('/tmp/data_dynamo.json','a+') as f:
+    f.write(json.dumps(labels)) 
+    f.close()
+with open("/tmp/data_dynamo.json", "rb+") as f:
+    s3.upload_fileobj(f, S3_BUCKET, f"dynamo.json") 
+
